@@ -1,0 +1,1335 @@
+#include <GL/glut.h>
+#include <cmath>
+#include <windows.h>
+#include <stdlib.h>
+#include <vector>
+#define MAX_DROPS 700
+
+// ----------------------- Global Variables ----------------------- //
+// Bird 1 (original)
+float birdX1_D = -35, birdY1_D = 15;
+float birdWingY1_D = -1, birdDirection1_D = 1;
+float birdScale1_D = 0.3f;
+// Bird 2 (smaller)
+float birdX2_D = -40, birdY2_D = 13;
+float birdWingY2_D = -1, birdDirection2_D = 1;
+float birdScale2_D = 0.3f;
+// Bird 3 (even smaller)
+float birdX3_D = -45, birdY3_D = 10;
+float birdWingY3_D = -1, birdDirection3_D = 1;
+float birdScale3_D = 0.3f;
+//Rain
+float dropX_D[MAX_DROPS], dropY_D[MAX_DROPS];
+int totalDrops_D = 0;
+bool raining_D = false;
+//Vehicle
+float busWheelAngle_D = 0.0f;
+float carWheelAngle_D = 0.0f;
+float car2WheelAngle_D = 0.0f;
+float carPosX_D = -40.0f;
+float carPosX_D_Speed = 0.02f;
+float car2PosX_D = 40;
+float car2BPosX_D = -40;
+float speedMultiplier_D = 1.0f;
+float busPosX_D =  20.0f;
+float cloud_D_1PosX_D =  -10.0f;
+float cloud_D_2PosX_D =  95.0f;
+float boat1_PosX_D = 8.0f;
+float boat1_Speed_D = -0.03f;
+float boat2_PosX_D = 0.0f;
+float boat2_Speed_D = 0.05f;
+bool isNight_D   = false;
+bool isEvening_D = false;
+bool paused_D = false;
+
+// Mouse click handler
+void mouseHandler_D(int button, int state, int, int)
+{
+    if (state != GLUT_DOWN) return;
+    if (button == GLUT_RIGHT_BUTTON)
+    {
+        raining_D = true;  // start rain
+    }
+    else if (button == GLUT_LEFT_BUTTON)
+    {
+        raining_D = false;  // stop rain
+        totalDrops_D = 0;   // remove all drops
+        for (int i = 0; i < MAX_DROPS; i++)
+            dropY_D[i] = -30.0f; // move out of screen
+        glutPostRedisplay(); // immediately redraw
+    }
+}
+
+void keyboard_D(unsigned char key, int x, int y)
+{
+    if (key == 'n' || key == 'N')
+    {
+        isNight_D   = true;
+        isEvening_D = false;
+        glutPostRedisplay();
+    }
+    else if (key == 'e' || key == 'E')
+    {
+        isEvening_D = true;
+        isNight_D   = false;
+        glutPostRedisplay();
+    }
+    else if (key == 'd' || key == 'D')
+    {
+        isNight_D   = false;
+        isEvening_D = false;   // default to day
+        glutPostRedisplay();
+    }
+    if (key == 'h' || key == 'H')
+    {
+        speedMultiplier_D += 0.5f;
+    }
+    else if (key == 'l' || key == 'L')
+    {
+        speedMultiplier_D -= 0.2f;
+    }
+    else if (key == 'p' || key == 'P')
+    {
+        paused_D = !paused_D;
+    }
+}
+
+//General Quad
+void drawQuad_D(float x1, float y1, float x2, float y2, float x3, float y3, float x4, float y4, float r, float g, float b)
+{
+    glColor3f(r,g,b);
+    glBegin(GL_QUADS);
+    glVertex2f(x1, y1);
+    glVertex2f(x2, y2);
+    glVertex2f(x3, y3);
+    glVertex2f(x4, y4);
+    glEnd();
+}
+
+//General circle function
+void Circle_D(float radius, float xc, float yc, float r, float g, float b)
+{
+    glBegin(GL_POLYGON);
+    for(int i=0; i<200; i++)
+    {
+        glColor3f(r,g,b);
+        float pi=3.1416;
+        float A=(i*2*pi)/200;
+        float r=radius;
+        float x = r * cos(A);
+        float y = r * sin(A);
+        glVertex2f(x+xc,y+yc);
+    }
+    glEnd();
+}
+
+//General SemiCircle function
+void SemiCircle_D(float radius, float xc, float yc, float r, float g, float b)
+{
+    glBegin(GL_POLYGON);
+    for(int i=0; i<200; i++)
+    {
+        glColor3f(r,g,b);
+        float pi=3.1416;
+        float A=(i*2*pi)/400;
+        float r=radius;
+        float x = r * cos(A);
+        float y = r * sin(A);
+        glVertex2f(x+xc,y+yc);
+    }
+    glEnd();
+}
+
+//General Line Draw
+void Line_D(float x1, float y1, float x2, float y2,float r, float g, float b)
+{
+    glColor3f(r,g,b);
+    glLineWidth(2);
+    glBegin(GL_LINES);
+    glVertex2f(x1, y1);
+    glVertex2f(x2, y2);
+    glEnd();
+}
+// Generate random X coordinate between -40 and 40
+static inline float randX_D()
+{
+    return -40.0f + 80.0f * (rand() / (float)RAND_MAX);
+}
+// Add a single raindrop
+void addDrop_D()
+{
+    if (totalDrops_D < MAX_DROPS)
+    {
+        dropX_D[totalDrops_D] = randX_D();
+        dropY_D[totalDrops_D] = 20.0f;  // start from top of ortho
+        totalDrops_D++;
+    }
+}
+// Draw all raindrops
+void drawRaindrops_D()
+{
+    glColor3f(0.043f, 0.435f, 0.639f);
+    glBegin(GL_LINES);
+    for (int i = 0; i < totalDrops_D; ++i)
+    {
+        glVertex2f(dropX_D[i], dropY_D[i]);
+        glVertex2f(dropX_D[i], dropY_D[i] - 0.5f);  // length of drop
+    }
+    glEnd();
+}
+void drawRotatingWheel_D(float cx, float cy, float radius, float angle)
+{
+    glPushMatrix();
+    glTranslatef(cx, cy, 0.0f);    // move to wheel center
+    glRotatef(angle, 0, 0, 1);     // rotate around center
+
+    // Wheel outer circle
+    Circle_D(radius, 0, 0, 0.5, 0.5, 0.5);
+    // Inner hub
+    Circle_D(radius * 0.6, 0, 0, 0, 0, 0);
+
+    // Simple spokes
+    glColor3f(1.0f, 1.0f, 1.0f);
+    glBegin(GL_LINES);
+    glVertex2f(0, 0);
+    glVertex2f(radius * 0.6, 0);
+    glVertex2f(0, 0);
+    glVertex2f(-radius * 0.6, 0);
+    glVertex2f(0, 0);
+    glVertex2f(0, radius * 0.6);
+    glVertex2f(0, 0);
+    glVertex2f(0, -radius * 0.6);
+    glEnd();
+
+    glPopMatrix();
+}
+//Text writing
+void renderText_D(float x, float y, const char* text)
+{
+    glRasterPos2f(x, y);  // Set the position to start drawing text
+    for (const char* c = text; *c != '\0'; c++)
+    {
+        glutBitmapCharacter(GLUT_BITMAP_HELVETICA_12, *c);  // Render each character
+    }
+}
+//RBB
+struct RGB_D
+{
+    int red;
+    int green;
+    int blue;
+};
+
+//Polygon
+void polygon_D(std::vector<std::pair<float, float>> coord, RGB_D rgb = {255, 255, 255},
+               float Tx = 0, float Ty = 0, float s = 1)
+{
+    glColor3ub(rgb.red, rgb.green, rgb.blue);
+    glBegin(GL_POLYGON);
+    for (auto& c : coord)
+        glVertex2f(Tx + s * c.first, Ty + s * c.second);
+    glEnd();
+}
+
+//Bird Drawing
+void bird_D(float Tx, float Ty, float direction, float birdWingY, float s = 0.3f, RGB_D rgb = {0,0,0})
+{
+    // Body
+    polygon_D(
+    {
+        {5.0f * direction, 0.5f},{6.0f * direction, 0.3f},{5.9f * direction, 0.05f},{5.95f * direction, -0.25f},
+        {5.3f * direction, -0.07f},{5.0f * direction, -0.22f},{4.2f * direction, -0.95f},{2.8f * direction, -1.1f},
+        {1.8f * direction, -1.0f},{0.5f * direction, -2.0f},{1.7f * direction, -0.6f},{0.05f * direction, 0.25f},
+        {1.9f * direction, -0.06f},{2.2f * direction, 0.05f},{4.5f * direction, 0.37f},{5.0f * direction, 0.5f}
+    }, rgb, Tx, Ty, s);
+
+    // Wing
+    polygon_D(
+    {
+        {4.5f * direction, birdWingY * 0.37f},
+        {4.7f * direction, birdWingY * 1.7f},
+        {2.0f * direction, birdWingY * 5.0f},
+        {2.2f * direction, birdWingY * 0.05f}
+    }, rgb, Tx, Ty, s);
+}
+
+//Bird Display
+void birdDisplay_D()
+{
+    bird_D(birdX1_D, birdY1_D, birdDirection1_D, birdWingY1_D, birdScale1_D);
+    bird_D(birdX2_D, birdY2_D, birdDirection2_D, birdWingY2_D, birdScale2_D);
+    bird_D(birdX3_D, birdY3_D, birdDirection3_D, birdWingY3_D, birdScale3_D);
+}
+
+
+//***************************SKY****************************//
+void Cloud_D_1(float x, float y, float scale, float r, float g, float b)
+{
+    glPushMatrix();
+    glTranslated(x,y,0.0);
+    glScalef(scale, scale, 1.0f);
+
+    SemiCircle_D(3,-21,14,r,g,b);
+    SemiCircle_D(4.5,-16,14,r,g,b);
+    SemiCircle_D(3,-11,14,r,g,b);
+
+    glPopMatrix();
+}
+void Cloud_D_2(float x, float y, float scale,float r, float g, float b)
+{
+    glPushMatrix();
+    glTranslated(x,y,0.0);
+    glScalef(scale, scale, 1.0f);
+
+    Circle_D(2,-36,16,r,g,b);
+    Circle_D(2,-31,16,r,g,b);
+    Circle_D(2.5,-33.5,16.5,r,g,b);
+    Circle_D(2.5,-33.5,15.5,r,g,b);
+
+    glPopMatrix();
+}
+void Moon_D(float x, float y, float scale)
+{
+    glPushMatrix();
+    glTranslated(x,y,0.0);
+    glScalef(scale, scale, 1.0f);
+    //full
+    Circle_D(3,18,14,0.812, 0.812, 0.812);
+
+    //inner
+    Circle_D(0.7,19.5,14,0.69f, 0.69f, 0.69f);
+    Circle_D(0.4,17.5,13,0.69f, 0.69f, 0.69f);
+    Circle_D(0.6,16,15,0.69f, 0.69f, 0.69f);
+    Circle_D(0.4,19,12,0.69f, 0.69f, 0.69f);
+    Circle_D(0.5,18,16,0.69f, 0.69f, 0.69f);
+
+    glPopMatrix();
+}
+void Sun_D(float x, float y, float r, float g, float b, float scale)
+{
+    glPushMatrix();
+    glTranslated(x, y, 0.0);
+    glScaled(scale, scale, 1);
+
+    // Draw the sun core (circle)
+    Circle_D(3.5, 32, 14,r,g,b);
+
+    // Draw rays
+    glColor3f(r,g,b);  // same as sun color
+    glLineWidth(2);
+    glBegin(GL_LINES);
+    int rays = 16;  // number of rays
+    float pi = 3.1416;
+    for (int i = 0; i < rays; i++)
+    {
+        float A = (2 * pi * i) / rays;  // evenly spaced angles
+        float x1 = 32+4.2f * cos(A);       // start just outside the circle
+        float y1 = 14+4.2f * sin(A);
+        float x2 = 32+5.5f * cos(A);       // end further away (ray length)
+        float y2 = 14+5.5f * sin(A);
+        glVertex2f(x1, y1);
+        glVertex2f(x2, y2);
+    }
+    glEnd();
+}
+void drawGradient_D(float left, float right, float bottom, float top,
+                    float rTop, float gTop, float bTop,
+                    float rBottom, float gBottom, float bBottom)
+{
+    glBegin(GL_QUADS);
+    // bottom color
+    glColor3f(rBottom, gBottom, bBottom);
+    glVertex2f(left, bottom);
+    glVertex2f(right, bottom);
+
+    // top color
+    glColor3f(rTop, gTop, bTop);
+    glVertex2f(right, top);
+    glVertex2f(left, top);
+    glEnd();
+}
+
+void Sky_D(float x, float y)
+{
+    glPushMatrix();
+    glTranslated(x,y,0.0);
+
+    if (isNight_D)
+    {
+        drawGradient_D(-40, 40, 5, 20,
+                       0.05f, 0.05f, 0.2f,   // top
+                       0.0f, 0.0f, 0.0f);    // bottom
+    }
+    else if (isEvening_D)
+    {
+        drawGradient_D(-40, 40, 5, 20,
+                       0.6f, 0.2f, 0.3f,     // top
+                       0.9f, 0.5f, 0.3f);    // bottom
+    }
+    else // Day
+    {
+        drawGradient_D(-40, 40, 5, 20,
+                       0.2f, 0.6f, 1.0f,
+                       0.6f, 0.9f, 1.0f);
+    }
+    // Sun / Moon
+    if (!raining_D)
+    {
+        if (isNight_D)
+            Moon_D(0,5, 0.7);
+        else if (isEvening_D)
+            Sun_D(0,-1, 0.8f, 0.2f, 0.1f, 0.8);
+        else
+            Sun_D(-55,3, 1.0f, 0.843f, 0.0f, 0.8);
+    }
+
+    //Clouds
+    if (isNight_D)
+    {
+        Cloud_D_1(cloud_D_1PosX_D-40,1,1, 0.7,0.7,0.7);
+        Cloud_D_1(cloud_D_1PosX_D-20,-1, 0.6, 0.7,0.7,0.7);
+        Cloud_D_2(cloud_D_2PosX_D+30,-5, 1,0.7,0.7,0.7);
+        Cloud_D_2(cloud_D_2PosX_D,5, 0.7,0.7,0.7,0.7);
+    }
+    else if (isEvening_D)
+    {
+        Cloud_D_1(cloud_D_1PosX_D-40,7, 1, 0.95f, 0.6f, 0.4f);
+        Cloud_D_1(cloud_D_1PosX_D-20,4, 0.6, 0.95f, 0.6f, 0.4f);
+        Cloud_D_2(cloud_D_2PosX_D+30,-5, 1,0.95f, 0.6f, 0.4f);
+        Cloud_D_2(cloud_D_2PosX_D,5, 0.7,0.95f, 0.6f, 0.4f);
+    }
+
+    else if (raining_D)
+    {
+        Cloud_D_1(cloud_D_1PosX_D-40,1,1, 0.7,0.7,0.7);
+        Cloud_D_1(cloud_D_1PosX_D-20,-1, 0.6, 0.7,0.7,0.7);
+        Cloud_D_2(cloud_D_2PosX_D+30,-5, 1,0.7,0.7,0.7);
+        Cloud_D_2(cloud_D_2PosX_D,5, 0.7,0.7,0.7,0.7);
+    }
+    else
+    {
+        Cloud_D_1(cloud_D_1PosX_D-40,1,1, 1,1,1);
+        Cloud_D_1(cloud_D_1PosX_D-20,-1, 0.6, 1,1,1);
+        Cloud_D_2(cloud_D_2PosX_D+30,-5, 1,1,1,1);
+        Cloud_D_2(cloud_D_2PosX_D,5, 0.7,1,1,1);
+    }
+
+    glPopMatrix();
+}
+// ************************BRIDGE******************************* //
+void Bridge_Structure_D_Func(float a, float b, float c, float d)
+{
+    glColor3f(0.8, 0.8, 0.8);
+    glLineWidth(10.0f);
+    // Known endpoints
+    float x1 = a, y1 = b;  // left end
+    float x2 =  c, y2 = d;  // right end
+
+    // Circle properties
+    float centerX = (x1 + x2) / 2.0f;      // midpoint = circle center (X)
+    float centerY = (y1 + y2) / 2.0f;      // midpoint (Y) = 0 here
+    float radius  = fabs(x2 - x1) / 2.0f;  // half the distance = radius
+
+    int segments = 200; // smoothness
+
+    glBegin(GL_LINE_STRIP);
+    for (int i = 0; i <= segments; i++)
+    {
+        float theta = M_PI * i / segments;
+        float x = centerX + radius * cos(theta);
+        float y = centerY + radius * sin(theta);
+        glVertex2f(x, y);
+    }
+    glEnd();
+
+}
+void Car_D(float x, float y,float r, float g, float b, float mirror, float wheelSpeed)
+{
+    glPushMatrix();
+    glTranslated(x,y,0.0);
+
+    //Body
+    drawQuad_D(-8,-1, -8,-2, -2.5, -2, -2.5, -1, r,g,b);
+    //Mirror
+    drawQuad_D(-6.8, -0.2,-7.6,-1.1,-3.5,-1.1, -4.5,-0.2,0,0,0);
+
+    //Frame
+    glLineWidth(2.50f);
+    glBegin(GL_LINE_LOOP);
+    glColor3f(r,g,b);
+    glVertex2f(-5.8, -0.2);
+    glVertex2f(-5.8, -1.1);
+    glVertex2f(-5.8, -1.1);
+    glVertex2f(-3.5, -1.1);
+    glVertex2f(-3.5, -1.1);
+    glVertex2f(-4.5, -0.2);
+    glVertex2f(-4.5, -0.2);
+    glVertex2f(-6.8, -0.2);
+    glVertex2f(-6.8, -0.2);
+    glVertex2f(-7.6, -1.1);
+    glVertex2f(-5.8, -1.1);
+    glEnd();
+
+    if (isNight_D || isEvening_D)
+    {
+        //Light
+        glBegin(GL_TRIANGLES);
+        glColor3f(1.0f, 1.0f, 0.5f);
+        glVertex2f(-0.5, -1);
+        glVertex2f(-2.5, -1.5);
+        glVertex2f(-0.5, -2);
+        glEnd();
+    }
+
+    //wheel 1
+    drawRotatingWheel_D(-7,-2, 0.5f, carWheelAngle_D);
+    //wheel 2
+    drawRotatingWheel_D(-3.5,-2, 0.5f, carWheelAngle_D);
+
+    glPopMatrix();
+}
+
+void Car2_D(float x, float y, float r, float g, float b, float mirror)
+{
+    glPushMatrix();
+    glTranslated(x,y,0.0);
+    glScalef(mirror, 1,1);
+
+    //Body
+    drawQuad_D(2,-3, 2,-4, 8,-4, 8,-3, r,g,b);
+    //mirror
+    drawQuad_D(3.5,-3, 8,-3, 7,-2,5,-2,0,0,0);
+    //Frame
+    glLineWidth(2.50f);
+    glBegin(GL_LINE_LOOP);
+    glColor3f(r,g,b);
+    glVertex2f(6,-2);
+    glVertex2f(6,-3);
+    glVertex2f(8,-3);
+    glVertex2f(7,-2);
+    glVertex2f(5,-2);
+    glVertex2f(3.5,-3);
+    glVertex2f(6,-3);
+    glEnd();
+
+    //Light
+    if (isNight_D || isEvening_D)
+    {
+        glBegin(GL_TRIANGLES);
+        glColor3f(1.0f, 1.0f, 0.5f);
+        glVertex2f(2,-3.5);
+        glVertex2f(0,-3);
+        glVertex2f(0,-4);
+        glEnd();
+    }
+
+    //Wheel 1
+    drawRotatingWheel_D(3, -4, 0.5f, car2WheelAngle_D);
+    //wheel 2
+    drawRotatingWheel_D(7, -4, 0.5f, car2WheelAngle_D);
+
+    glPopMatrix();
+}
+
+void Bus_D(float x, float y)
+{
+    glPushMatrix();
+    glTranslated(x,y,0.0);
+
+    //Roof
+    glBegin(GL_POLYGON);
+    glColor3f(1.0f, 1.0f, 0.0f);
+    glVertex2f(22.5, -1.5);
+    glVertex2f(32, -1.5);
+    glVertex2f(32, -1.2);
+    glVertex2f(32.4, -1);
+    glVertex2f(22.5, -1);
+    glEnd();
+
+    //Body
+    drawQuad_D(22, -1.5,22, -4,32, -4,32, -1.5,1.0f, 1.0f, 0.0f);
+    //text color
+    glColor3f(0.0f, 0.0f, 0.0f);
+    renderText_D(25.0f, -3.50f, "School Bus");
+    //FrontCurve
+    SemiCircle_D(0.5, 22.5, -1.5, 1,1,0);
+
+    //Back
+    drawQuad_D(32.4, -1,32, -1.2,32, -4,32.4, -3.8,1.0f, 1.0f, 0.0f);
+
+    glColor3f(0.5f, 0.5f, 0.5f);
+    glLineWidth(1.0f);
+    glBegin(GL_LINE_LOOP);
+    glVertex2f(32.4f, -1.0f);
+    glVertex2f(32.0f, -1.2f);
+    glVertex2f(32.0f, -4.0f);
+    glVertex2f(32.4f, -3.8f);
+    glEnd();
+
+
+    if (isNight_D || isEvening_D)
+    {
+        //Head Light
+        glBegin(GL_TRIANGLES);
+        glColor3f(1.0, 1.0, 0.5);
+        glVertex2f(22,-3.5);
+        glVertex2f(19,-3);
+        glVertex2f(19,-4);
+        glEnd();
+
+        //Tail Light
+        drawQuad_D(32.35, -3.5, 32.05, -3.65, 32.05, -3.85, 32.35, -3.7, 1.0f, 0.0f, 0.0f);
+    }
+
+    //wheel 1
+    drawRotatingWheel_D(24, -4, 0.5f, busWheelAngle_D);
+    //wheel 2
+    drawRotatingWheel_D(30, -4, 0.5f, busWheelAngle_D);
+
+    //Door
+    drawQuad_D(23.2,-2, 22.6, -2, 22.6, -3.9, 23.2, -3.9,0.0f, 0.0f, 0.0f);
+
+    //window
+    drawQuad_D(24.4,-1.6,24.4,-2.6,25.4,-2.6,25.4,-1.6,0.0f, 0.0f, 0.0f);
+    drawQuad_D(26.4,-1.6,26.4,-2.6,27.4,-2.6,27.4,-1.6,0.0f, 0.0f, 0.0f);
+    drawQuad_D(28.4,-1.6,28.4,-2.6,29.4,-2.6,29.4,-1.6,0.0f, 0.0f, 0.0f);
+    drawQuad_D(30.4,-1.6,30.4,-2.6,31.4,-2.6,31.4,-1.6,0.0f, 0.0f, 0.0f);
+
+    glPopMatrix();
+}
+
+//Road Strip
+void Strip_D(float x, float y)
+{
+    glPushMatrix();
+    glTranslated(x,y,0.0);
+    drawQuad_D(-35,-2.2,-35,-2.8,-30,-2.8,-30,-2.2, 1,1,1);
+    glPopMatrix();
+}
+
+//Tree
+void Tree_D(float x, float y)
+{
+    glPushMatrix();
+    glTranslated(x,y,0.0);
+
+    drawQuad_D(-38,-2.5,-38,-5,-37.5,-5,-37.5,-2.5, 0.36f, 0.25f, 0.20f);
+    if(isNight_D)
+    {
+        Circle_D(1, -37.7, -1.6, 0.065f, 0.275f, 0.065f);
+        Circle_D(0.7, -37, -2, 0.065f, 0.275f, 0.065f);
+        Circle_D(0.7, -38.5, -2, 0.065f, 0.275f, 0.065f);
+    }
+    else if(isEvening_D)
+    {
+        Circle_D(1, -37.7, -1.6, 0.085f, 0.36f, 0.085f);
+        Circle_D(0.7, -37, -2, 0.085f, 0.36f, 0.085f);
+        Circle_D(0.7, -38.5, -2, 0.085f, 0.36f, 0.085f);
+    }
+    else
+    {
+        Circle_D(1,-37.7, -1.6, 0.13f, 0.55f, 0.13f);
+        Circle_D(0.7,-37, -2, 0.13f, 0.55f, 0.13f);
+        Circle_D(0.7,-38.5, -2, 0.13f, 0.55f, 0.13f);
+    }
+
+
+    glPopMatrix();
+}
+
+void BridgeLight_D(float x, float y, float r, float g, float  b)
+{
+    glPushMatrix();
+    glTranslated(x,y,0.0);
+
+    Circle_D(0.3,0,9.5,0.20,0.20,0.20);
+    if(isNight_D)
+        Circle_D(0.4,0,9.5,r,g,b);
+    else if(isEvening_D)
+        Circle_D(0.4,0,9.5,r,g,b);
+    else
+        Circle_D(0.2,0,9.5,0.8, 0.8, 0.8);
+
+    glPopMatrix();
+}
+
+void Bridge_D(float x, float y)
+{
+    glPushMatrix();
+    glTranslated(x,y,0.0);
+
+    //Pillar
+    drawQuad_D(-10.5,-5,-10.5,-8,-9.5,-8,-9.5,-5, 0.8, 0.8, 0.8);
+    drawQuad_D(-11,-8,-11,-8.5,-9,-8.5,-9,-8, 0.36f, 0.25f, 0.20f);
+    drawQuad_D(10.5,-5,10.5,-8,9.5,-8,9.5,-5, 0.8, 0.8, 0.8);
+    drawQuad_D(11,-8,11,-8.5,9,-8.5,9,-8, 0.36f, 0.25f, 0.20f);
+
+    //ROAD
+    drawQuad_D(-40,0,-40,-5,40,-5,40,0, 0.2745f, 0.2784f, 0.2745f);
+    Line_D(-40,0,40,0, 0,0,0);
+    Line_D(-40,-5,40,-5, 0,0,0);
+
+    //BridgeStructureUpper
+
+    Line_D(-19,2.5,-19,0,0.20,0.20,0.20);
+    Line_D(-18,3.5,-18,0,0.20,0.20,0.20);
+    Line_D(-16,4.5,-16,0,0.20,0.20,0.20);
+    Line_D(-14,4.5,-14,0,0.20,0.20,0.20);
+    Line_D(-12,3.5,-12,0,0.20,0.20,0.20);
+    Line_D(-11,2.5,-11,0,0.20,0.20,0.20);
+    Bridge_Structure_D_Func(10,0,20,0);
+
+    Line_D(11,2.5,11,0,0.20,0.20,0.20);
+    Line_D(12,3.5,12,0,0.20,0.20,0.20);
+    Line_D(14,4.5,14,0,0.20,0.20,0.20);
+    Line_D(16,4.5,16,0,0.20,0.20,0.20);
+    Line_D(18,3.5,18,0,0.20,0.20,0.20);
+    Line_D(19,2.5,19,0,0.20,0.20,0.20);
+    Bridge_Structure_D_Func(-10,0,-20,0);
+
+    Line_D(-8,5.6,-8,0,0.20,0.20,0.20);
+    Line_D(-6,7.6,-6,0,0.20,0.20,0.20);
+    Line_D(-2,9.5,-2,0,0.20,0.20,0.20);
+    Line_D(2,9.5,2,0,0.20,0.20,0.20);
+    Line_D(6,7.6,6,0,0.20,0.20,0.20);
+    Line_D(8,5.6,8,0,0.20,0.20,0.20);
+    Bridge_Structure_D_Func(-10,0,10,0);
+
+    //Road strip
+    Strip_D(-7,0);
+    Strip_D(0,0);
+    Strip_D(7,0);
+    Strip_D(14,0);
+    Strip_D(21,0);
+    Strip_D(28,0);
+    Strip_D(35,0);
+    Strip_D(42,0);
+    Strip_D(49,0);
+    Strip_D(56,0);
+    Strip_D(63,0);
+    Strip_D(70,0);
+
+    //Car
+    Car2_D(car2BPosX_D,2,0,1,0,-1);
+    Car_D(carPosX_D,0,1,0,0.5,1,5);
+    //Bus
+    Car2_D(car2PosX_D,0,0,1,1,1);
+    Bus_D(busPosX_D,0);
+
+    //Tree on road left
+    Tree_D(0,0);
+    Tree_D(5,0);
+    Tree_D(9,0);
+    Tree_D(14,0);
+    //Tree on road right
+    Tree_D(62,0);
+    Tree_D(69,0);
+    Tree_D(76,0);
+
+    //BridgeStructureLower
+    Line_D(19,-5,19,-2.5,0.20,0.20,0.20);
+    Line_D(18,-5,18,-1.3,0.20,0.20,0.20);
+    Line_D(16,-5,16,-0.5,0.20,0.20,0.20);
+    Line_D(14,-5,14,-0.5,0.20,0.20,0.20);
+    Line_D(12,-5,12,-1.3,0.20,0.20,0.20);
+    Line_D(11,-5,11,-2.5,0.20,0.20,0.20);
+    Bridge_Structure_D_Func(10,-5,20,-5);
+
+    Line_D(-19,-5,-19,-2.5,0.20,0.20,0.20);
+    Line_D(-18,-5,-18,-1.3,0.20,0.20,0.20);
+    Line_D(-16,-5,-16,-0.5,0.20,0.20,0.20);
+    Line_D(-14,-5,-14,-0.5,0.20,0.20,0.20);
+    Line_D(-12,-5,-12,-1.3,0.20,0.20,0.20);
+    Line_D(-11,-5,-11,-2.5,0.20,0.20,0.20);
+    Bridge_Structure_D_Func(-10,-5,-20,-5);
+
+    Line_D(-8,0.5,-8,-5,0.20,0.20,0.20);
+    Line_D(-6,2.5,-6,-5,0.20,0.20,0.20);
+    Line_D(-2,4.5,-2,-5,0.20,0.20,0.20);
+    Line_D(2,4.5,2,-5,0.20,0.20,0.20);
+    Line_D(6,2.6,6,-5,0.20,0.20,0.20);
+    Line_D(8,0.6,8,-5,0.20,0.20,0.20);
+    Bridge_Structure_D_Func(-10,-5,10,-5);
+
+    BridgeLight_D(0,0.45,1,0,0);
+    BridgeLight_D(4,-0.32,1.0, 1.0, 0.5);
+    BridgeLight_D(-4,-0.32,1.0, 1.0, 0.5);
+    BridgeLight_D(-15,-4.5,0,0,1);
+    BridgeLight_D(15,-4.5,0,0,1);
+
+    /*BridgeLight_D(0,-4.5);
+    BridgeLight_D(4,-5.3);
+    BridgeLight_D(-4,-5.3);
+    BridgeLight_D(-15,-9.5);
+    BridgeLight_D(15,-9.5);*/
+
+    glPopMatrix();
+}
+//********************LAKE**************************//
+void Boat_D_1(float x, float y, float scale)
+{
+    glPushMatrix();
+    glTranslated(x,y,0.0);
+    glScalef(scale, scale, 1.0f);
+
+    drawQuad_D(10,-10,10,-12,17,-12,17,-10, 0.2f, 0.2f, 0.2f);
+    drawQuad_D(8,-12,8,-13,18,-13,18,-12,0.55f, 0.27f, 0.07f);
+    glBegin(GL_TRIANGLES);
+    glColor3f(0.55f, 0.27f, 0.07f);
+    glVertex2f(6,-11);
+    glVertex2f(8,-13);
+    glVertex2f(8,-12);
+    glEnd();
+    glBegin(GL_TRIANGLES);
+    glColor3f(0.55f, 0.27f, 0.07f);
+    glVertex2f(20,-11);
+    glVertex2f(18,-13);
+    glVertex2f(18,-12);
+    glEnd();
+
+    // border
+    glColor3f(0.0f, 0.0f, 0.0f);
+    glLineWidth(2.0f);
+    glBegin(GL_LINE_LOOP);
+    glVertex2f(6, -11);
+    glVertex2f(8, -13);
+    glVertex2f(18, -13);
+    glVertex2f(20, -11);
+    glVertex2f(18, -12);
+    glVertex2f(8, -12);
+    glEnd();
+
+    glPopMatrix();
+}
+void Boat_D_2(float x, float y, float r, float g, float b)
+{
+    glPushMatrix();
+    glTranslated(x,y,0.0);
+
+    drawQuad_D(-22,-20,-20,-22,-14,-22,-10,-20, r,g,b);
+    glColor3f(0.0f, 0.0f, 0.0f);
+    renderText_D(-18.4f, -21.2f, "Speed Boat");
+    drawQuad_D(-20,-19,-20,-20,-17,-20,-17,-19, 0.2f, 0.2f, 0.2f);
+    drawQuad_D(-17.2,-18,-17,-18,-17,-20,-17.2,-20, 0.2f, 0.2f, 0.2f);
+
+    glBegin(GL_TRIANGLES);
+    glColor3f(0,0,0);
+    glVertex2f(-17.2,-18);
+    glVertex2f(-13,-20);
+    glVertex2f(-11,-20);
+    glEnd();
+
+    // border
+    glColor3f(0.0f, 0.0f, 0.0f);
+    glLineWidth(2.0f);
+    glBegin(GL_LINE_LOOP);
+    glVertex2f(-22, -20);
+    glVertex2f(-20, -22);
+    glVertex2f(-14, -22);
+    glVertex2f(-10, -20);
+    glEnd();
+
+    glPopMatrix();
+}
+
+void Lake_D(float x, float y)
+{
+    glPushMatrix();
+    glTranslated(x,y,0.0);
+
+    if(isNight_D)
+    {
+        //Up
+        drawQuad_D(-21,0,21,0,20,5,-20,5,0.1f, 0.1f, 0.3f);
+        //Down
+        drawQuad_D(-22,-5,-25,-25, 25,-25,22,-5, 0.1f, 0.1f, 0.3f);
+    }
+    else if(isEvening_D)
+    {
+        drawGradient_D(-25, 25, -25, 5,
+                       0.62f, 0.40f, 0.28f,   // top
+                       0.12f, 0.18f, 0.30f);  // bottom
+    }
+    else
+    {
+        //Up
+        drawQuad_D(-21,0,21,0,20,5,-20,5,0.4f, 0.6f, 0.8f);
+        //Down
+        drawQuad_D(-22,-5,-25,-25, 25,-25,22,-5, 0.4f, 0.6f, 0.8f);
+    }
+
+    //Call boat
+    Boat_D_1(0,1, 1);
+    Boat_D_1(boat1_PosX_D,8, 0.5);
+    //Call speedboat
+    Boat_D_2(0,0, 0.6f, 0.6f, 0.65f);
+    Boat_D_2(boat2_PosX_D, 5,1,1,1);
+
+    glPopMatrix();
+}
+//*******************BUILDING******************//
+void building_1Window_D(float x, float y)
+{
+    glPushMatrix();
+    glTranslated(x,y,0.0);
+
+    //Body
+    drawQuad_D(31,-13,31,-15,32,-15,32,-13, 0,0,0);
+    //white border
+    Line_D(31, -13, 31, -15, 1.0f, 1.0f, 1.0f);
+    Line_D(31, -15, 32, -15, 1.0f, 1.0f, 1.0f);
+    Line_D(32, -15, 32, -13, 1.0f, 1.0f, 1.0f);
+    Line_D(32, -13, 31, -13, 1.0f, 1.0f, 1.0f);
+    glPopMatrix();
+}
+
+void Building1_D(float x, float y, float scale,float r, float g, float b)
+{
+    glPushMatrix();
+    glTranslated(x,y,0.0);
+    glScalef(scale, scale, 1.0f);
+
+    //Roof
+    glBegin(GL_TRIANGLES);
+    glColor3f(0,0,0);
+    glVertex2f(35,-10);
+    glVertex2f(30,-12);
+    glVertex2f(40,-12);
+    glEnd();
+    //Body
+    drawQuad_D(30,-12,30,-24.5,40,-24.5,40,-12, r,g,b);
+
+    //windows
+    building_1Window_D(0,0);
+    building_1Window_D(2,0);
+    building_1Window_D(5,0);
+    building_1Window_D(7,0);
+
+    building_1Window_D(0,-3);
+    building_1Window_D(2,-3);
+    building_1Window_D(5,-3);
+    building_1Window_D(7,-3);
+
+    building_1Window_D(0,-6);
+    building_1Window_D(2,-6);
+    building_1Window_D(5,-6);
+    building_1Window_D(7,-6);
+
+    building_1Window_D(0,-9);
+    building_1Window_D(2,-9);
+    building_1Window_D(5,-9);
+    building_1Window_D(7,-9);
+
+    //Ground
+    drawQuad_D(29.5,-24.5,29.5,-25,40.5,-25,40.5,-24.5, 0,0,0);
+
+    glPopMatrix();
+}
+
+void building_2Window_D(float x, float y)
+{
+    glPushMatrix();
+    glTranslated(x,y,0.0);
+
+    drawQuad_D(33,-6,33,-8,35,-8,35,-6,0.2,0.2,0.2);
+    glColor3f(0.0f, 0.0f, 1.0f);
+    glLineWidth(2.0f);
+    glBegin(GL_LINE_LOOP);
+    glVertex2f(33, -6);
+    glVertex2f(33, -8);
+    glVertex2f(35, -8);
+    glVertex2f(35, -6);
+    glEnd();
+
+    //divide
+    Line_D(34,-6,34,-8,1,1,1);
+    Line_D(33,-7,35,-7,1,1,1);
+    glPopMatrix();
+}
+
+void Building2_D(float x, float y, float scale, float r, float g, float b)
+{
+    glPushMatrix();
+    glTranslated(x,y,0.0);
+    glScalef(scale, scale, 1.0f);
+
+    //Upper roof
+    drawQuad_D(34.5,-3.5,34.5,-4,37.5,-4,37.5,-3.5,0,0,0);
+    //Roof
+    drawQuad_D(40,-4,32,-4,32,-5,40,-5,0,0,0);
+
+    //Body
+    drawQuad_D(32,-5,32,-14,40,-14,40,-5,r,g,b);
+    glColor3f(0.0f, .0f, 0.8f); // white border
+    glLineWidth(2.0f);
+    glBegin(GL_LINE_LOOP);
+    glVertex2f(32, -5);
+    glVertex2f(32, -14);
+    glVertex2f(40, -14);
+    glVertex2f(40, -5);
+    glEnd();
+
+    //Divide
+    Line_D(36,-5,36,-14,0,0,1);
+
+    //windows
+    building_2Window_D(0,0);
+    building_2Window_D(4,0);
+
+    building_2Window_D(0,-2.5);
+    building_2Window_D(4,-2.5);
+
+    building_2Window_D(0,-5);
+    building_2Window_D(4,-5);
+
+    glPopMatrix();
+}
+void building_3Window_D(float x, float y)
+{
+    glPushMatrix();
+    glTranslated(x,y,0.0);
+
+    // Window body
+    drawQuad_D(29.5,-9,29.5,-11,30.5,-11,30.5,-9, 0.0f, 0.0f, 0.0f);
+    // Border (blue)
+    glColor3f(0.0f, 0.0f, 1.0f);
+    glLineWidth(2.0f);
+    glBegin(GL_LINE_LOOP);
+    glVertex2f(29.5, -9);
+    glVertex2f(29.5, -11);
+    glVertex2f(30.5, -11);
+    glVertex2f(30.5, -9);
+    glEnd();
+    glPopMatrix();
+}
+void Building3_D(float x, float y, float scale)
+{
+    glPushMatrix();
+    glTranslated(x,y,0.0);
+    glScalef(scale, scale, 1.0f);
+
+    //roof
+    drawQuad_D(25.8, -6,25.8, -8,34.2, -8,34.2, -6,0.6f, 0.3f, 0.0f);
+    glColor3f(0.0f, 0.0f, 0.0f);
+    glLineWidth(2.0f);
+    glBegin(GL_LINE_LOOP);
+    glVertex2f(25.8, -6);
+    glVertex2f(25.8, -8);
+    glVertex2f(34.2, -8);
+    glVertex2f(34.2, -6);
+    glEnd();
+
+    //body
+    drawQuad_D(26,-8,26,-22,34,-22,34,-8,0.831f, 0.714f, 0.518f);
+    glColor3f(0.0f, 0.0f, 0.0f);
+    glLineWidth(2.0f);
+    glBegin(GL_LINE_LOOP);
+    glVertex2f(26, -8);
+    glVertex2f(26, -22);
+    glVertex2f(34, -22);
+    glVertex2f(34, -8);
+    glEnd();
+
+    //middle
+    drawQuad_D(29,-8,29,-22,31,-22,31,-8,1,1,1);
+    // Border (black)
+    glColor3f(0.0f, 0.0f, 0.0f);
+    glLineWidth(2.0f);
+    glBegin(GL_LINE_LOOP);
+    glVertex2f(29, -8);
+    glVertex2f(29, -22);
+    glVertex2f(31, -22);
+    glVertex2f(31, -8);
+    glEnd();
+
+    //Stair Window
+    building_3Window_D(0,0);
+    building_3Window_D(0,-3);
+    building_3Window_D(0,-3);
+    building_3Window_D(0,-6);
+    building_3Window_D(0,-9);
+
+    //Floor divider
+    Line_D(26,-10,29,-10,0,0,0);
+    Line_D(26,-12,29,-12,0,0,0);
+    Line_D(26,-14,29,-14,0,0,0);
+    Line_D(26,-16,29,-16,0,0,0);
+    Line_D(26,-18,29,-18,0,0,0);
+    Line_D(26,-20,29,-20,0,0,0);
+
+    Line_D(34, -10, 31, -10, 0, 0, 0);
+    Line_D(34, -12, 31, -12, 0, 0, 0);
+    Line_D(34, -14, 31, -14, 0, 0, 0);
+    Line_D(34, -16, 31, -16, 0, 0, 0);
+    Line_D(34, -18, 31, -18, 0, 0, 0);
+    Line_D(34, -20, 31, -20, 0, 0, 0);
+
+    glPopMatrix();
+}
+
+void Building_D()
+{
+    //Build area ground
+    Line_D(-19.95,5,-20.95,0,0,0,0);
+    Line_D(19.95,5,20.95,0,0,0,0);
+    Line_D(21.93,-5,24.5,-25.5,0,0,0);
+    Line_D(-22,-5,-25,-25,0,0,0);
+
+    drawQuad_D(22,-5,24.5,-25,40,-25,40,-5,0.486f, 0.435f, 0.420f);
+    drawQuad_D(20,5,21,0,40,0,40,5,0.486f, 0.435f, 0.420f);
+    drawQuad_D(-20,5,-21,0,-40,0,-40,5,0.486f, 0.435f, 0.420f);
+
+    //Lower right
+    Building2_D(-4,2,1.1, 0.992f, 0.914f, 0.894f);
+    Building3_D(-1.75,0,1);
+    Building1_D(-1,0,1, 0.259, 0.788, 0.369);
+
+    //Upper right
+    Building1_D(3,17,0.6, 0.690, 0.482, 0.910);
+    Building2_D(-9,18,1.2, 1.000, 0.251, 0.251);
+    Tree_D(62,5);
+    Tree_D(69,5);
+    Tree_D(76,5);
+
+    //upper left
+    Building3_D(-38,14,0.5);
+    Building2_D(-53.5,11.5,0.7,0.8, 0.8, 0.8);
+    Building1_D(-60,18,0.7,0.404, 0.612, 0.922);
+    Tree_D(0,5);
+    Tree_D(7,5);
+    Tree_D(14,5);
+
+}
+//PARK***************
+void Road_Park_D()
+{
+    //Grass
+    drawQuad_D(-40,-5,-40,-25,-25,-25,-22,-5, 0.486f, 0.435f, 0.420f);
+    //Road
+    drawQuad_D(-32,-25,-30,-25,-30,-5,-32,-5, 0.2,0.2,0.2);
+    drawQuad_D(-40,-12,-40,-14,-23.3,-14,-23,-12,0.2,0.2,0.2);
+    drawQuad_D(-40,-22,-40,-24,-24.8,-24,-24.5,-22,0.2,0.2,0.2);
+}
+
+void Park_D()
+{
+    Road_Park_D();
+    //Block A
+    Tree_D(2,-4);
+    Tree_D(4,-7);
+    Tree_D(-1.5,-7);
+
+    //Block B
+    drawQuad_D(-28,-8,-29,-9,-24,-9,-23,-8,0.627,0.322,0.176);
+
+    Line_D(-29,-9,-29,-10,0,0,0);
+    Line_D(-28,-9.5,-28,-9,0,0,0);
+    Line_D(-24,-9,-24,-10,0,0,0);
+    Line_D(-23,-8,-23,-9.5,0,0,0);
+    glBegin(GL_LINE_LOOP);
+    glColor3f(0,0,0);
+    glVertex2f(-28,-8);
+    glVertex2f(-29,-9);
+    glVertex2f(-24,-9);
+    glVertex2f(-23,-8);
+    glVertex2f(-28,-8);
+    glEnd();
+
+    //Block C
+    drawQuad_D(-39,-17,-38,-18,-33,-18,-34,-17,0.627,0.322,0.176);
+    Line_D(-39,-17,-39,-18.5,0,0,0);
+    Line_D(-38,-18,-38,-19,0,0,0);
+    Line_D(-34,-18,-34,-18.5,0,0,0);
+    Line_D(-33,-18,-33,-19,0,0,0);
+    glBegin(GL_LINE_LOOP);
+    glColor3f(0,0,0);
+    glVertex2f(-39,-17);
+    glVertex2f(-38,-18);
+    glVertex2f(-33,-18);
+    glVertex2f(-34,-17);
+    glVertex2f(-39,-17);
+    glEnd();
+
+    Tree_D(5,-19);
+    Tree_D(0,-19);
+    Tree_D(2,-9);
+
+    //Block D
+    Tree_D(9,-9);
+    Tree_D(11,-17);
+    Tree_D(13,-9);
+}
+void Rain_Update_D()
+{
+    if (raining_D)
+    {
+        for (int i = 0; i < totalDrops_D; ++i)
+        {
+            dropY_D[i] -= 0.3f;  // move down
+            if (dropY_D[i] <= -25.0f)    // reset
+            {
+                dropX_D[i] = randX_D();
+                dropY_D[i] = 20.0f;
+            }
+        }
+        for (int i = 0; i < 2; ++i) addDrop_D();  // keep adding new drops
+    }
+}
+void Bird_Upadate_D()
+{
+    // Birds Animation
+    float speed = 0.08f; // same X speed
+
+    // Bird 1
+    birdX1_D += speed;
+    birdWingY1_D += 0.3f;
+    if (birdWingY1_D > 1) birdWingY1_D = -1;
+    if (birdX1_D > 45) birdX1_D = -45;
+    // Bird 2
+    birdX2_D += speed;
+    birdWingY2_D += 0.3f;
+    if (birdWingY2_D > 1) birdWingY2_D = -1;
+    if (birdX2_D > 45) birdX2_D = -45;
+    // Bird 3
+    birdX3_D += speed;
+    birdWingY3_D += 0.3f;
+    if (birdWingY3_D > 1) birdWingY3_D = -1;
+    if (birdX3_D > 45) birdX3_D = -45;
+
+}
+void Cloud_Update_D()
+{
+    // right to left
+    cloud_D_1PosX_D += 0.04f;
+    if (cloud_D_1PosX_D >125) cloud_D_1PosX_D = -10;   // Reset
+
+    // right to left
+    cloud_D_2PosX_D -= 0.08f;
+    if (cloud_D_2PosX_D < -55) cloud_D_2PosX_D = 125;   // Reset
+}
+void Boat_update_D()
+{
+    boat1_PosX_D += boat1_Speed_D;
+    if (boat1_PosX_D > 8 || boat1_PosX_D < -22)
+    {
+        boat1_Speed_D = -boat1_Speed_D;  // reverse direction
+    }
+
+    boat2_PosX_D += boat2_Speed_D;
+    if (boat2_PosX_D > 28 || boat2_PosX_D < 0)
+    {
+        boat2_Speed_D = -boat2_Speed_D;  // reverse direction
+    }
+}
+void Vehicle_Update_D()
+{
+    // left to right
+    carPosX_D += 0.08f*speedMultiplier_D;
+    if (carPosX_D > 50) carPosX_D = -40;
+
+    // right to left
+    car2PosX_D -= 0.17f*speedMultiplier_D;
+    if (car2PosX_D < -50) car2PosX_D = 40;
+
+    // right to left
+    car2BPosX_D += 0.17f*speedMultiplier_D;
+    if (car2BPosX_D >50) car2BPosX_D = -40;
+
+    busPosX_D -= 0.08f*speedMultiplier_D;
+    if (busPosX_D < -75) busPosX_D = 20;   // Reset
+
+    //clockwise
+    busWheelAngle_D += 5.0f*speedMultiplier_D;
+    if (busWheelAngle_D <= -360.0f) busWheelAngle_D = 0.0f;
+    //Anticlockwise Car1
+    carWheelAngle_D -= 5.0f*speedMultiplier_D;
+    if (carWheelAngle_D <= -360.0f) carWheelAngle_D = 0.0f;
+    //Anticlockwise Car1
+    car2WheelAngle_D += 7.0f*speedMultiplier_D;
+    if (car2WheelAngle_D <= -360.0f) car2WheelAngle_D = 0.0f;
+}
+void update_D(int value)
+{
+    if (paused_D)
+    {
+        glutTimerFunc(16, update_D, 0); // call timer do nothing
+        return;
+    }
+    Rain_Update_D();
+    Bird_Upadate_D();
+    Cloud_Update_D();
+    Boat_update_D();
+    Vehicle_Update_D();
+
+    glutPostRedisplay();
+    glutTimerFunc(16, update_D, 0);
+}
+void Scene_D()
+{
+    Sky_D(0,0);
+    if(!raining_D)
+        birdDisplay_D();
+    Bridge_D(0,0);
+    Lake_D(0,0);
+    Bridge_D(0,0);
+    Park_D();
+    Building_D();
+
+    if (raining_D && totalDrops_D > 0) drawRaindrops_D();
+}
+
+void display()
+{
+    glClearColor(1.0f, 1.0f, 1.0f, 1.0f);
+    glClear(GL_COLOR_BUFFER_BIT);
+    Scene_D();
+    glutSwapBuffers();//For double
+
+}
+//MUST use
+void init()
+{
+    glClearColor(1.0, 1.0, 1.0, 1.0);
+    glMatrixMode(GL_PROJECTION);
+    glLoadIdentity();
+
+    glEnable(GL_BLEND);
+    glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+
+    glEnable(GL_LINE_SMOOTH);
+    glHint(GL_LINE_SMOOTH_HINT, GL_NICEST);
+
+    glEnable(GL_POLYGON_SMOOTH);
+    glHint(GL_POLYGON_SMOOTH_HINT, GL_NICEST);
+
+    gluOrtho2D(-40, 40, -25, 20);
+}
+
+int main(int argc, char** argv)
+{
+    glutInit(&argc, argv);
+    glutInitDisplayMode(GLUT_DOUBLE | GLUT_RGB);
+
+    int windowWidth = 1350;
+    int windowHeight = 700;
+
+    // Get screen width and height
+    int screenWidth  = glutGet(GLUT_SCREEN_WIDTH);
+    int screenHeight = glutGet(GLUT_SCREEN_HEIGHT);
+
+    int x = (screenWidth  - windowWidth) / 2;
+    int y = (screenHeight - windowHeight) / 2;
+
+    glutInitWindowSize(windowWidth, windowHeight);
+    glutInitWindowPosition(x, y);
+    glutCreateWindow("HatirJheel");
+
+    init();
+    glutKeyboardFunc(keyboard_D);
+    glutMouseFunc(mouseHandler_D);
+    glutDisplayFunc(display);
+    glutTimerFunc(0, update_D, 0);
+    glutMainLoop();
+
+    return 0;
+}
